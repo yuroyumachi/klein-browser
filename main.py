@@ -1,5 +1,5 @@
 
-from ui import HTMLViewer, StatusBar, HorizontalRule
+from klein import HTMLViewer, StatusBar, HorizontalRule
 from tkinter import Tk, Frame, Button, Label, Entry
 from tkinter.ttk import Frame, Button, Label, Entry, Style
 
