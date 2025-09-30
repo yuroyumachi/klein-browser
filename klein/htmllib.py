@@ -20,20 +20,23 @@ class Document:
     def getch(self)-> str:
         if self.buffer != []:
             return self.buffer.pop()
-        
-        return next(self.content)
+
+        try:
+            return next(self.content)
+        except StopIteration:
+            return ""
 
     def ungetch(self, ch: str)-> None:
         self.buffer.append(ch)
 
     def peek(self)-> str:
         if self.buffer == []:
-            tmp_ch = self.getch()
+            ch = self.getch()
     
-            if tmp_ch is not None:
-                self.ungetch(tmp_ch)
+            if ch != "":
+                self.ungetch(ch)
     
-            return tmp_ch
+            return ch
     
         return self.buffer[-1]
 
@@ -49,7 +52,9 @@ class HTMLToken:
 def tokenizing(source: Document)-> HTMLToken:
     ch: str = ""
     while ch := source.getch():
-        pass
+        match ch:        
+            case '<':
+                case
 
 class HTMLNode:
     def __init__(self)-> None:
