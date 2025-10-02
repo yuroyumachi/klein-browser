@@ -4,16 +4,6 @@ from collections.abc import Iterator
 from enum import Enum
 from dataclasses import dataclass
 
-class HTMLTokenType(Enum):
-    DATA = 0
-    START_TAG = DATA + 1
-    SELF_CLOSING_TAG = START_TAG + 1
-    END_TAG = SELF_CLOSING_TAG + 1
-    COMMENT = END_TAG + 1
-    DECLARATION = COMMENT + 1
-    ESCAPE = DECLARATION + 1
-    DOC_EOF = ESCAPE + 1
-
 class Document:
     def __init__(self, content: str) -> None:
         self.content: Iterator[str] = iter(content)
@@ -46,72 +36,80 @@ class Document:
         while self.peek() and self.peek().isspace():
             self.getch()
 
-@dataclass
-class HTMLToken:
-    type: HTMLTokenType
-    content: str
+class HTMLTokenType(Enum):
+    DATA = 0
+    START_TAG = DATA + 1
+    SELF_CLOSING_TAG = START_TAG + 1
+    END_TAG = SELF_CLOSING_TAG + 1
+    COMMENT = END_TAG + 1
+    DECLARATION = COMMENT + 1
+    ESCAPE = DECLARATION + 1
+    DOC_EOF = ESCAPE + 1
 
-def tokenizing(source: Document)-> HTMLToken:
+def tokenizing(source: Document)-> str:
     buffer: str = ""
-
     while (ch := source.getch()) != "":
-        if buffer == "":
-            buffer += ch
+        if not buffer:
+            buffer = ch
             continue
 
-        if buffer.startswith("<!--"):
-            while (ch := source.getch()) != "":
-                if buffer.endswith("-->"):
-                    return HTMLToken(HTMLTokenType.COMMENT, buffer)
-            return HTMLToken(HTMLTokenType.COMMENT, buffer)
+        if ch == "<":
+            source.ungetch(ch)
+            return buffer
+        elif ch == ">":
+            buffer += ch
+            if buffer.startswith("<"):
+                return buffer
+        elif ch == "&":
+            source.ungetch(ch)
+            return buffer
+        elif ch == ";":
+            buffer += ch
+            if buffer.startswith("&"):
+                return buffer
+        elif ch.isspace():
+            if not buffer[-1].isspace():
+                buffer += " "
+        else:
+            buffer += ch
 
-        match ch:
-            case "<":
-                source.ungetch(ch)
-                return HTMLToken(HTMLTokenType.DATA, buffer)
+    return buffer
 
-            case ">":
-                buffer += ch
-                
-                if not buffer.startswith("<"):
-                    continue
 
-                if buffer.startswith("<!"):
-                    return HTMLToken(HTMLTokenType.DECLARATION, buffer)
-                elif buffer.startswith("</"):
-                    return HTMLToken(HTMLTokenType.END_TAG, buffer)
-                elif buffer.endswith("/>"):
-                    return HTMLToken(HTMLTokenType.SELF_CLOSING_TAG, buffer)
-                elif buffer.startswith("<"):
-                    return HTMLToken(HTMLTokenType.START_TAG, buffer)
+def token_type(token: str)-> HTMLTokenType:
+    if token == "":
+        return HTMLTokenType.DOC_EOF
 
-            case "&":
-                source.ungetch(ch)
-                return HTMLToken(HTMLTokenType.DATA, buffer)
-            
-            case ";":
-                buffer += ch
+    if token.startswith("<!--"):
+        return HTMLTokenType.COMMENT
 
-                if buffer.startswith("&"):
-                    return HTMLToken(HTMLTokenType.ESCAPE, buffer)
+    if token.endswith(">"):
+        if token.startswith("<!"):
+            return HTMLTokenType.DECLARATION
+        if token.startswith("</"):
+            return HTMLTokenType.END_TAG
+        if token.startswith("<") and token.endswith("/>"):
+            return HTMLTokenType.SELF_CLOSING_TAG
 
-            case _ if ch.isspace():
-                if not buffer[-1].isspace():
-                    buffer += ch
+        if token.startswith("<"):
+            return (HTMLTokenType.START_TAG
+                if token[1:-1].strip() != ""
+                else HTMLTokenType.DATA
+                )
 
-            case _:
-                buffer += ch
-
-    if buffer == "":
-        return HTMLToken(HTMLTokenType.DOC_EOF, buffer)
-
-    return HTMLToken(HTMLTokenType.DATA, buffer)
+    if token.startswith("&") and token.endswith(";"):
+        return HTMLTokenType.ESCAPE
+    
+    return HTMLTokenType.DATA
 
 class HTMLNode:
-    def __init__(self, tag: str, attr: dict[str, str] = {}, child: list[HTMLNode] = [])-> None:
+    def __init__(self, tag: str, attrs: dict[str, str] = {}, children: list[HTMLNode | str] = [])-> None:
         self.tag = tag
-        self.attr = attr
-        self.child = child
+        self.attrs = attrs
+        self.children = children
+
+    def add_child(self, child: HTMLNode | str)-> None:
+        self.children.append(child)
 
 def parse_attr_str(attr_str: str)-> dict[str, str]:
     key: str = ""
@@ -119,11 +117,13 @@ def parse_attr_str(attr_str: str)-> dict[str, str]:
     buffer: str = ""
     quote_ch: str = ""
     for ch in attr_str:
+        pass
         if quote_ch != "":
             if ch in ("\"", "\'"):
                 quote_ch = ""
             else:
                 buffer += ch
+            continue
 
         if ch in ("\"", "\'"):
             quote_ch = ch
@@ -140,23 +140,28 @@ def parse_attr_str(attr_str: str)-> dict[str, str]:
             buffer = ""
         else:
             buffer += ch
+
+    if buffer or key:
+        if key:
+            attrs[key] = buffer
+        else:
+            attrs[buffer] = "" 
     
     return attrs
 
-def parse_tag(token: HTMLToken)-> tuple[str, dict[str, str]]:
-    if token.type == HTMLTokenType.START_TAG:
-        content = token.content[1:-1]
-    else:
-        content = token.content[1:-2]
+def parse_tag(content: str)-> tuple[str, dict[str, str]]:
+    """take a start tag or self-closing tag, and it didn't wrap by any "<>"."""
+    parts = content.split(None, 1)
+    match parts:
+        case [tag]:
+            return tag, {}
+        case [tag, attrs]:
+            return tag, parse_attr_str(attrs)
+        case _:
+            return content, {}
 
-    tag, attr_str = content.split(None, 1)
-
-    attr_pair: list[str] = []
-    attrs: dict[str, str] = parse_attr_str(attr_str)
-
-    return (tag, attrs)
-
-def escape(entity: HTMLToken)-> str:
+def escape(entity: str)-> str:
+    """take a escape entity to translate it."""
     entity_map: dict[str, str] = {
         "&nbsp;" : " ",
         "&lt;" : "<",
@@ -175,30 +180,76 @@ def escape(entity: HTMLToken)-> str:
         "&times;" : "×",
         "&divide;" : "÷"
     }
-    if entity.content in entity_map:
-        return entity_map[entity.content]
-    if entity.content.startswith("&#"):
+    if entity in entity_map:
+        return entity_map[entity]
+    if entity.startswith("&#"):
         try:
-            ch = chr(int(entity.content[2:-1]))
+            ch = chr(int(entity[2:-1]))
         except:
-            return entity.content
+            return entity
 
-    return entity.content
+    return entity
 
-def parse_end_tag(token: HTMLToken)-> str:
-    content = token.content[2:-1]
-    tag, _ = content.split(None, 1)
+def parse_end_tag(tag: str)-> str:
+    tag, *_ = tag.split(None, 1)
     return tag
 
-def build_node_tree(source: Document)-> None:
-    pass
+def build_node_tree(source: Document)-> HTMLNode:
+    root = HTMLNode("", {}, [])
+    node_stack: list[HTMLNode] = [root]
+
+    while token := tokenizing(source):
+        type_ = token_type(token)
+        if type_ == HTMLTokenType.START_TAG:
+            tag, attrs = parse_tag(token[1:-1])
+            node_stack.append(HTMLNode(tag, attrs, []))
+        
+        if type_ == HTMLTokenType.SELF_CLOSING_TAG:
+            tag, attrs = parse_tag(token[1:-2])
+            node_stack[-1].add_child(HTMLNode(tag, attrs, []))
+
+        if type_ == HTMLTokenType.END_TAG:
+            tag = parse_end_tag(token[2:-1])
+            while node := node_stack.pop():
+                node_stack[-1].add_child(node)
+                if tag == node.tag:
+                    break
+
+        if type_ == HTMLTokenType.DECLARATION:
+            node_stack[-1].add_child(token)
+
+        if type_ == HTMLTokenType.COMMENT:
+            node_stack[-1].add_child(token)
+
+        if type_ == HTMLTokenType.DATA:
+            node_stack[-1].add_child(token)
+
+        if type_ == HTMLTokenType.DOC_EOF:
+            n = len(node_stack) - 1
+            while n > 0:
+                node_stack[n - 1].add_child(node_stack.pop())
+                n -= 1
+            break
+
+    return root
+
+def print_node_tree(node: HTMLNode, depth: int = 0)-> None:
+    print("\t" * depth, end="")
+    print(f":{'?' if node.children == [] else ''}{node.tag}, {node.attrs}:")
+    buffer = ""
+    k = 0
+    for child in node.children:
+        if isinstance(child, str):
+            print("\t" * depth, end="")
+            print(k, child)
+            k += 1
+        else:
+            print_node_tree(child, depth + 1)
 
 if __name__ == "__main__":
     with open("example.html", "rt") as f:
         source = f.read()
 
     s = Document(source)
-    while token := tokenizing(s):
-        if token.type == HTMLTokenType.DOC_EOF:
-            break
-        print(f"{token.type}, {token.content}")
+    t = build_node_tree(s)
+    print_node_tree(t)
