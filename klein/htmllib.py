@@ -178,10 +178,9 @@ def build_node_tree(source: Document)-> HTMLNode:
 
         if type_ == HTMLTokenType.END_TAG:
             tag = parse_end_tag(token[2:-1])
-            while node := node_stack.pop():
+            while tag != node_stack[-1].tag and len(node_stack) > 1:
+                node = node_stack.pop()
                 node_stack[-1].add_child(node)
-                if tag == node.tag:
-                    break
 
         if type_ == HTMLTokenType.DECLARATION:
             node_stack[-1].add_child(token)
