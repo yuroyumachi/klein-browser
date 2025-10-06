@@ -49,20 +49,28 @@ class Token:
 
 def tokenizing(source: Document)-> str:
     buffer: str = ""
-    while (ch := source.getch()) != "":
+    while ch := source.getch():
         if ch == "\n":
-            return buffer
-        if ch.isspace():
-            return buffer
-        if ch in ("{", "}", ":", ";"):
             if buffer:
+                source.ungetch(ch)
                 return buffer
             return ch
+        elif ch.isspace():
+            if buffer:
+                source.ungetch(ch)
+                return buffer
+            return ch
+        elif ch in ("{", "}", ":", ";"):
+            if buffer:
+                source.ungetch(ch)
+                return buffer
+            return ch
+        else:
+            buffer += ch
 
     return ""
 
-
-class TokenState(Enum):
+class ExpectToken(Enum):
     SELECTOR = 0
     OPEN_BRACE = SELECTOR + 1
     KEY = OPEN_BRACE + 1
@@ -73,27 +81,54 @@ class TokenState(Enum):
 
 def make_rule(source: Document)-> Rules:
     selectors: list[str] = []
-    declaration_pair: tuple[str, str] = ("", "")
+    key: str = ""
     declarations: dict[str, str] = {}
 
-    state: TokenState = TokenState.SELECTOR
+    state: ExpectToken = ExpectToken.SELECTOR
+
     while (token := Token(tokenizing(source))).type != TokenType.EOF:
-        if state == TokenState.SELECTOR:
+        if state == ExpectToken.SELECTOR:
             if token.type == TokenType.FIELD:
                 selectors.append(token.token)
-                state = TokenState.OPEN_BRACE
+                state = ExpectToken.OPEN_BRACE
 
-        if state == TokenState.OPEN_BRACE:
+        if state == ExpectToken.OPEN_BRACE:
             if token.type == TokenType.OPEN_BRACE:
-                state = TokenState.KEY
+                state = ExpectToken.KEY
             elif token.type == TokenType.FIELD and len(selectors) < 3:
                 selectors.append(token.token)
             elif token.type == TokenType.FIELD and len(selectors) >= 3:
                 selectors.clear()
-                state = TokenState.SELECTOR
+                state = ExpectToken.SELECTOR
 
-        if state == TokenState.KEY:
+        if state == ExpectToken.KEY:
             if token.type == TokenType.FIELD:
-                pass
+                key = token.token
+                state = ExpectToken.COLON
+                                    
+        if state == ExpectToken.COLON:
+            if token.type == TokenType.COLON:
+                state = ExpectToken.VALUE
+            if token.type == TokenType.SEMICOLON:
+                declarations[key] = ""
+                state = ExpectToken.CLOSE_BRACE
+
+        if state == ExpectToken.VALUE:
+            if token.type == TokenType.FIELD:
+                declarations[key] = token.token
+            if token.type == TokenType.SEMICOLON:
+                state = ExpectToken.CLOSE_BRACE
+
+        if state == ExpectToken.END_RULE:
+            if token.type == TokenType.SEMICOLON:
+                state = ExpectToken.SELECTOR
+            elif token.type == TokenType.CLOSE_BRACE:
+                state = ExpectToken.SELECTOR
 
     return Rules(selectors, declarations)
+
+if __name__ == "__main__":
+    doc = Document("body { color: red; }")
+    rule = make_rule(doc)
+    print(rule.selector)
+    print(rule.declarations)
