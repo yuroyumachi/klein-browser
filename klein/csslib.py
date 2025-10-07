@@ -2,27 +2,21 @@
 from common import Document
 from enum import Enum
 
-class Rules:
-    def __init__(self, selector: list[str], declarations: dict[str, str]):
-        self.selector = selector
+class Declaration:
+    def __init__(self, property: str, value: str, important: bool)-> None:
+        self.property = property
+        self.value = value
+        self.important = important
+
+class Rule:
+    def __init__(self, selectors: list[str], declarations: list[Declaration])-> None:
+        self.selectors = selectors
         self.declarations = declarations
-
-class Ruleset:
-    def __init__(self)-> None:
-        self.rulesets: set[Rules] = set()
-
-    def add_rule(self, rule: Rules)-> None:
-        self.rulesets.add(rule)
 
 class TokenType(Enum):
     FIELD = 0
-    OPEN_BRACE = FIELD + 1
-    CLOSE_BRACE = OPEN_BRACE + 1
-    COLON = CLOSE_BRACE + 1
-    SEMICOLON = COLON + 1
-    WHITESPACE = SEMICOLON + 1
-    NEWLINE = WHITESPACE + 1
-    EOF = NEWLINE + 1
+    SELF_EXPLAINING = FIELD + 1
+    EOF = SELF_EXPLAINING + 1
 
 class Token:
     def __init__(self, token: str)-> None:
@@ -32,103 +26,109 @@ class Token:
     def type(self)-> TokenType:
         if self.token == "":
             return TokenType.EOF 
-        if self.token == "{":
-            return TokenType.OPEN_BRACE
-        elif self.token == "}":
-            return TokenType.CLOSE_BRACE
-        elif self.token == ":":
-            return TokenType.COLON
-        elif self.token == ";":
-            return TokenType.SEMICOLON
-        elif self.token == "\n":
-            return TokenType.NEWLINE
-        elif self.token.isspace():
-            return TokenType.WHITESPACE
+
+        if self.token in ("{", "}", ":", ";", ",", "\n"):
+            return TokenType.SELF_EXPLAINING
         else:
             return TokenType.FIELD
 
 def tokenizing(source: Document)-> str:
     buffer: str = ""
+    quote_ch: str = ""
+    in_comment: bool = False
     while ch := source.getch():
-        if ch == "\n":
-            if buffer:
-                source.ungetch(ch)
-                return buffer
-            return ch
+        if in_comment:
+            if ch == "*" and source.getch() == "/":
+                in_comment = False
+        
+        elif quote_ch and ch == quote_ch:
+            quote_ch = ""
+            return buffer
+        
+        elif quote_ch:
+            buffer += ch
+            continue
+        
+        elif ch in ("\"", "\'"):
+            quote_ch = ch
+        
         elif ch.isspace():
             if buffer:
-                source.ungetch(ch)
                 return buffer
-            return ch
-        elif ch in ("{", "}", ":", ";"):
+            source.skip_whitespace()
+            return " "
+        
+        elif ch in ("{", "}", ":", ";", ",", "\n"):
             if buffer:
                 source.ungetch(ch)
                 return buffer
             return ch
+        
+        elif ch == "/":
+            if buffer:
+                source.ungetch(ch)
+                return buffer
+            if source.peek() == "*":
+                in_comment = True
+        
         else:
             buffer += ch
 
-    return ""
+    return buffer
 
-class ExpectToken(Enum):
-    SELECTOR = 0
-    OPEN_BRACE = SELECTOR + 1
-    KEY = OPEN_BRACE + 1
+class TokenState(Enum):
+    SELECTORS = 0
+    KEY = SELECTORS + 1
     COLON = KEY + 1
     VALUE = COLON + 1
-    END_RULE = VALUE + 1
-    CLOSE_BRACE = END_RULE
+    END_DECLARAION = VALUE + 1
 
-def make_rule(source: Document)-> Rules:
+def make_rule(source: Document)-> list[Rule]:
+    rule = Rule([], [])
     selectors: list[str] = []
-    key: str = ""
-    declarations: dict[str, str] = {}
+    declarations: list[Declaration] = []
+    key = ""
 
-    state: ExpectToken = ExpectToken.SELECTOR
-
-    while (token := Token(tokenizing(source))).type != TokenType.EOF:
-        if state == ExpectToken.SELECTOR:
-            if token.type == TokenType.FIELD:
+    state: TokenState = TokenState.SELECTORS
+    while token := Token(tokenizing(source)):
+        if token.type == TokenType.EOF:
+            break
+        if state == TokenState.SELECTORS:
+            if token.token == "{":
+                state = TokenState.KEY
+                continue
+            elif token.type == TokenType.FIELD:
                 selectors.append(token.token)
-                state = ExpectToken.OPEN_BRACE
-
-        if state == ExpectToken.OPEN_BRACE:
-            if token.type == TokenType.OPEN_BRACE:
-                state = ExpectToken.KEY
-            elif token.type == TokenType.FIELD and len(selectors) < 3:
-                selectors.append(token.token)
-            elif token.type == TokenType.FIELD and len(selectors) >= 3:
-                selectors.clear()
-                state = ExpectToken.SELECTOR
-
-        if state == ExpectToken.KEY:
-            if token.type == TokenType.FIELD:
-                key = token.token
-                state = ExpectToken.COLON
-                                    
-        if state == ExpectToken.COLON:
-            if token.type == TokenType.COLON:
-                state = ExpectToken.VALUE
-            if token.type == TokenType.SEMICOLON:
-                declarations[key] = ""
-                state = ExpectToken.CLOSE_BRACE
-
-        if state == ExpectToken.VALUE:
-            if token.type == TokenType.FIELD:
-                declarations[key] = token.token
-            if token.type == TokenType.SEMICOLON:
-                state = ExpectToken.CLOSE_BRACE
-
-        if state == ExpectToken.END_RULE:
-            if token.type == TokenType.SEMICOLON:
-                state = ExpectToken.SELECTOR
-            elif token.type == TokenType.CLOSE_BRACE:
-                state = ExpectToken.SELECTOR
-
-    return Rules(selectors, declarations)
+        elif state == TokenState.KEY:
+            if token.token == "}":
+                break
 
 if __name__ == "__main__":
-    doc = Document("body { color: red; }")
+    doc = Document("""body {
+        background-color: #f0f0f2;
+        margin: 0;
+        padding: 0;
+        font-family: -apple-system, system-ui, BlinkMacSystemFont, "Segoe UI", "Open Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+        
+    }
+    div {
+        width: 600px;
+        margin: 5em auto;
+        padding: 2em;
+        background-color: #fdfdff;
+        border-radius: 0.5em;
+        box-shadow: 2px 3px 7px 2px rgba(0,0,0,0.02);
+    }
+    a:link, a:visited {
+        color: #38488f;
+        text-decoration: none;
+    }
+    @media (max-width: 700px) {
+        div {
+            margin: 0 auto;
+            width: auto;
+        }
+    }""")
     rule = make_rule(doc)
     print(rule.selector)
     print(rule.declarations)
