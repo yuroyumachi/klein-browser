@@ -83,8 +83,7 @@ class TokenState(Enum):
     VALUE = COLON + 1
     END_DECLARAION = VALUE + 1
 
-def make_rule(source: Document)-> list[Rule]:
-    rule = Rule([], [])
+def make_rule(source: Document)-> Rule:
     selectors: list[str] = []
     declarations: list[Declaration] = []
     key = ""
@@ -93,15 +92,34 @@ def make_rule(source: Document)-> list[Rule]:
     while token := Token(tokenizing(source)):
         if token.type == TokenType.EOF:
             break
+
         if state == TokenState.SELECTORS:
             if token.token == "{":
                 state = TokenState.KEY
                 continue
             elif token.type == TokenType.FIELD:
                 selectors.append(token.token)
+
         elif state == TokenState.KEY:
             if token.token == "}":
                 break
+            elif token.type == TokenType.FIELD:
+                key = token.token
+                state = TokenState.COLON
+                continue
+        
+        elif state == TokenState.COLON:
+            if token.token == ":":
+                state = TokenState.VALUE
+                continue
+        
+        elif state == TokenState.END_DECLARAION:
+            if token.token == ";":
+                state = TokenState.KEY
+            elif token.type == TokenType.FIELD:
+                key = token.token
+
+    return Rule(selectors, declarations)
 
 if __name__ == "__main__":
     doc = Document("""body {
@@ -130,5 +148,5 @@ if __name__ == "__main__":
         }
     }""")
     rule = make_rule(doc)
-    print(rule.selector)
+    print(rule.selectors)
     print(rule.declarations)
