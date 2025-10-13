@@ -8,10 +8,21 @@ class Declaration:
         self.value = value
         self.important = important
 
+    def __repr__(self) -> str:
+        return f""":\
+property>> {self.property},
+value>> {self.value},
+important>> {self.important}
+:"""
+
 class Rule:
     def __init__(self, selectors: list[str], declarations: list[Declaration])-> None:
         self.selectors = selectors
         self.declarations = declarations
+    
+    def __repr__(self) -> str:
+        selectors = ", ".join(self.selectors)
+        return f":selectors>> {self.selectors}::declarations>> {self.declarations}:"
 
 class TokenType(Enum):
     FIELD = 0
@@ -32,50 +43,6 @@ class Token:
         else:
             return TokenType.FIELD
 
-def tokenizing(source: Document)-> str:
-    buffer: str = ""
-    quote_ch: str = ""
-    in_comment: bool = False
-    while ch := source.getch():
-        if in_comment:
-            if ch == "*" and source.getch() == "/":
-                in_comment = False
-        
-        elif quote_ch and ch == quote_ch:
-            quote_ch = ""
-            return buffer
-        
-        elif quote_ch:
-            buffer += ch
-            continue
-        
-        elif ch in ("\"", "\'"):
-            quote_ch = ch
-        
-        elif ch.isspace():
-            if buffer:
-                return buffer
-            source.skip_whitespace()
-            return " "
-        
-        elif ch in ("{", "}", ":", ";", ",", "\n"):
-            if buffer:
-                source.ungetch(ch)
-                return buffer
-            return ch
-        
-        elif ch == "/":
-            if buffer:
-                source.ungetch(ch)
-                return buffer
-            if source.peek() == "*":
-                in_comment = True
-        
-        else:
-            buffer += ch
-
-    return buffer
-
 class TokenState(Enum):
     SELECTORS = 0
     KEY = SELECTORS + 1
@@ -83,43 +50,98 @@ class TokenState(Enum):
     VALUE = COLON + 1
     END_DECLARAION = VALUE + 1
 
-def make_rule(source: Document)-> Rule:
-    selectors: list[str] = []
-    declarations: list[Declaration] = []
-    key = ""
+class Lexer:
+    def __init__(self, source: Document)-> None:
+        self.source = source
 
-    state: TokenState = TokenState.SELECTORS
-    while token := Token(tokenizing(source)):
-        if token.type == TokenType.EOF:
-            break
+    def tokenizing(self)-> str:
+        self.source.skip_whitespace()
 
-        if state == TokenState.SELECTORS:
-            if token.token == "{":
-                state = TokenState.KEY
-                continue
-            elif token.type == TokenType.FIELD:
-                selectors.append(token.token)
+        buffer = ""
+        quote_ch = ""
+        while ch := self.source.getch():
+            if ch in ("\"", "\'"):
+                quote_ch = ch if quote_ch == "" else ""
+            elif quote_ch:
+                buffer += ch
+            elif ch in ("{", "}", ":", ";", ",", "\n"):
+                if buffer:
+                    self.source.ungetch(ch)
+                else:
+                    buffer = ch
+                return buffer
+            elif ch.isspace():
+                self.source.ungetch(ch)
+                return buffer
+            else:
+                buffer += ch
+        
+        return buffer
 
-        elif state == TokenState.KEY:
-            if token.token == "}":
+    def next(self)-> Token:
+        return Token(self.tokenizing())
+
+class Parser:
+    def __init__(self)-> None:
+        self.lexer = Lexer(Document(""))
+        self.tree = {}
+
+    def feed(self, source: Document)-> None:
+        self.lexer.source = source
+        while token := self.lexer.next():
+            if token.type == TokenType.EOF:
+                print(token.token)
                 break
-            elif token.type == TokenType.FIELD:
-                key = token.token
-                state = TokenState.COLON
-                continue
-        
-        elif state == TokenState.COLON:
-            if token.token == ":":
-                state = TokenState.VALUE
-                continue
-        
-        elif state == TokenState.END_DECLARAION:
-            if token.token == ";":
-                state = TokenState.KEY
-            elif token.type == TokenType.FIELD:
-                key = token.token
+            else:
+                print(token.token)
+                self.parse_field(token)
 
-    return Rule(selectors, declarations)
+    def parse_field(self, token: Token)-> None:
+        state = TokenState.SELECTORS
+        selectors = []
+        declarations = []
+        property = ""
+        value = ""
+        important = False
+
+        while token := self.lexer.next():
+            if token.type == TokenType.EOF:
+                break
+            elif token.type == TokenType.SELF_EXPLAINING:
+                if state == TokenState.SELECTORS:
+                    state = TokenState.KEY
+                elif state == TokenState.KEY:
+                    state = TokenState.COLON
+                elif state == TokenState.COLON:
+                    state = TokenState.VALUE
+                elif state == TokenState.VALUE:
+                    state = TokenState.END_DECLARAION
+            elif token.type == TokenType.FIELD:
+                if state == TokenState.SELECTORS:
+                    selectors.append(token.token)
+                elif state == TokenState.KEY:
+                    property = token.token
+                    state = TokenState.COLON
+                elif state == TokenState.COLON:
+                    state = TokenState.VALUE
+                elif state == TokenState.VALUE:
+                    value += token.token
+                elif state == TokenState.END_DECLARAION:
+                    if token.token == "!important":
+                        important = True
+                    else:
+                        declarations.append(Declaration(property, value, important))
+                        property = ""
+                        value = ""
+                        important = False
+                        state = TokenState.KEY
+
+        if property and value:
+            declarations.append(Declaration(property, value, important))
+
+        # if selectors and declarations:
+        rule = Rule(selectors, declarations)
+        print(rule)
 
 if __name__ == "__main__":
     doc = Document("""body {
@@ -147,6 +169,5 @@ if __name__ == "__main__":
             width: auto;
         }
     }""")
-    rule = make_rule(doc)
-    print(rule.selectors)
-    print(rule.declarations)
+    parser = Parser()
+    parser.feed(doc)
