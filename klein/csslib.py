@@ -1,26 +1,38 @@
 
 from common import Document
 from enum import Enum
-import ast
 
 class TokenType(Enum):
-    FIELD = 0
-    SELF_EXPLAINING = FIELD + 1
-    EOF = SELF_EXPLAINING + 1
+    IDENT            = 0
+    FUNCTION         = IDENT            + 1
+    AT_KEYWORD       = FUNCTION         + 1
+    HASH             = AT_KEYWORD       + 1
+    STRING           = HASH             + 1
+    BAD_STRING_TOKEN = STRING           + 1
+    URL              = BAD_STRING_TOKEN + 1
+    BAD_URL          = URL              + 1
+    DELIM            = BAD_URL          + 1
+    NUMBER           = DELIM            + 1
+    PERCENTAGE       = NUMBER           + 1
+    DIMENSION        = PERCENTAGE       + 1
+    WHITESPACE       = DIMENSION        + 1
+    CDO              = WHITESPACE       + 1
+    CDC              = CDO              + 1
+    COLON            = CDC              + 1
+    SEMICOLON        = COLON            + 1
+    COMMA            = SEMICOLON        + 1
+    SELF_EXPLAINING  = COMMA            + 1
 
 class Token:
     def __init__(self, token: str)-> None:
         self.token = token
 
     @property
-    def type(self)-> TokenType:
+    def type(self)-> TokenType | None:
         if self.token == "":
-            return TokenType.EOF 
-
-        if self.token in ("{", "}", ":", ";", ",", "\n"):
-            return TokenType.SELF_EXPLAINING
-        else:
-            return TokenType.FIELD
+            return None
+        
+        # WIP: return other TokenTypes
 
 class TokenState(Enum):
     SELECTORS = 0
@@ -75,6 +87,12 @@ class Parser:
         token: Token
         while token := self.lexer.next():
             pass
+
+    def handle_selectors(self, selectors: list[str])-> None:
+        pass
+
+    def handle_declarations(self, declarations: dict[str, str])-> None:
+        pass
 
 if __name__ == "__main__":
     src = """body {
