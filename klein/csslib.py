@@ -53,22 +53,40 @@ class LexerState(Enum):
     CDC_TOKEN        = auto()
 
 class Lexer:
-    def __init__(self, source: Document)-> None:
-        self.source = source
+    def __init__(self, source: str)-> None:
         self.state: LexerState | None = None
 
-    def tokenizing(self)-> str:
+        self.preprocessing(source)
+
+    def preprocessing(self, source: str)-> None:
         buffer: str = ""
+        
+        i = 0
+        j = 0
+        n = len(source)
+        commented: bool = False
+        while i < n:
+            ch = source[i]
+            if ch == "/" and source[i+1] == "*":
+                i += 2
+                while i < n and source[i] != "*" and source[i+1] != "/":
+                    i += 1
+                else:
+                    i += 2
+            elif ch.isspace():
+                if not buffer.endswith(" "):
+                    buffer += " "
+                i += 1
+            else:
+                buffer += ch
+                i += 1
 
-        ch: str = ""
-        match ch := self.source.getch():
-            case "/" if self.source.peek() == "*":
-                while ch := self.source.getch():
-                    if ch == "*" and self.source.peek() == "/":
-                        break
+        self.source = buffer
+        self.length = len(self.source)
+        self.position = 0
 
-    def next(self)-> Token:
-        return Token(self.tokenizing())
+    def next(self)-> tuple[TokenType, str]: # type: ignore
+        pass
 
 class Parser:
     def __init__(self)-> None:
@@ -80,11 +98,7 @@ class Parser:
         self.declarations: dict[str, str] = {}
 
     def feed(self, source: str)-> None:
-        self.lexer = Lexer(Document(source))
-
-        token: Token
-        while token := self.lexer.next():
-            pass
+        pass
 
     def handle_selectors(self, selectors: list[str])-> None:
         pass
@@ -118,5 +132,6 @@ if __name__ == "__main__":
             width: auto;
         }
     }"""
-    parser = Parser()
-    parser.feed(src)
+    Lexer(src)
+    # parser = Parser()
+    # parser.feed(src)
