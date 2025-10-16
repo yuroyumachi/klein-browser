@@ -21,12 +21,12 @@ class Document:
     def peek(self)-> str:
         if self.buffer == []:
             ch = self.getch()
-    
+
             if ch != "":
                 self.ungetch(ch)
-    
+ 
             return ch
-    
+
         return self.buffer[-1]
 
     def skip_whitespace(self)-> None:

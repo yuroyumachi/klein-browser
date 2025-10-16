@@ -1,6 +1,6 @@
 
 from common import Document
-from enum import Enum
+from enum import Enum, auto
 
 class TokenType(Enum):
     IDENT            = 0
@@ -34,40 +34,38 @@ class Token:
         
         # WIP: return other TokenTypes
 
-class TokenState(Enum):
-    SELECTORS = 0
-    KEY = SELECTORS + 1
-    COLON = KEY + 1
-    VALUE = COLON + 1
-    END_DECLARAION = VALUE + 1
+class LexerState(Enum):
+    COMMENT          = auto()
+    HEX_DIGIT        = auto()
+    ESCAPE           = auto()
+    WHITESPACE_TOKEN = auto()
+    WS               = auto()
+    IDENT_TOKEN      = auto()
+    FUNCTION_TOKEN   = auto()
+    AT_KEYWORD_TOKEN = auto()
+    HASH_TOKEN       = auto()
+    STRING_TOKEN     = auto()
+    URL_TOKEN        = auto()
+    NUMBER_TOKEN     = auto()
+    DIMENSION_TOKEN  = auto()
+    PERCNETAGE_TOKEN = auto()
+    CDO_TOKEN        = auto()
+    CDC_TOKEN        = auto()
 
 class Lexer:
     def __init__(self, source: Document)-> None:
         self.source = source
+        self.state: LexerState | None = None
 
     def tokenizing(self)-> str:
-        self.source.skip_whitespace()
+        buffer: str = ""
 
-        buffer = ""
-        quote_ch = ""
-        while ch := self.source.getch():
-            if ch in ("\"", "\'"):
-                quote_ch = ch if quote_ch == "" else ""
-            elif quote_ch:
-                buffer += ch
-            elif ch in ("{", "}", ":", ";", ",", "\n"):
-                if buffer:
-                    self.source.ungetch(ch)
-                else:
-                    buffer = ch
-                return buffer
-            elif ch.isspace():
-                self.source.ungetch(ch)
-                return buffer
-            else:
-                buffer += ch
-        
-        return buffer
+        ch: str = ""
+        match ch := self.source.getch():
+            case "/" if self.source.peek() == "*":
+                while ch := self.source.getch():
+                    if ch == "*" and self.source.peek() == "/":
+                        break
 
     def next(self)-> Token:
         return Token(self.tokenizing())
