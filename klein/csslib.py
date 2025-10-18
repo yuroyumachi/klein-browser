@@ -84,9 +84,56 @@ class Lexer:
         self.source = buffer
         self.length = len(self.source)
         self.position = 0
+        return
 
-    def next(self)-> tuple[TokenType, str]: # type: ignore
-        pass
+    def next(self)-> tuple[TokenType, str]:
+        buffer: str = ""
+
+        while self.position < self.length:
+            if self.state is None:
+                match self.source[self.position]:
+                    case _ if self.source[self.position]:
+                        self.state = LexerState.WHITESPACE_TOKEN
+                    case "\"":
+                        self.state = LexerState.STRING_TOKEN
+                    case "#":
+                        pass
+                    case "\'":
+                        pass
+                    case "(":
+                        pass
+                    case ")":
+                        pass
+                    case "+":
+                        pass
+                    case ",":
+                        pass
+                    case "-":
+                        pass
+                    case ".":
+                        pass
+                    case ":":
+                        pass
+                    case ";":
+                        pass
+                    case "<":
+                        pass
+                    case "@":
+                        pass
+                    case "[":
+                        pass
+                    case "\\":
+                        pass
+                    case "]":
+                        pass
+                    case "{":
+                        pass
+                    case "}":
+                        pass
+            elif self.state == LexerState.STRING_TOKEN:
+                pass
+
+            self.position += 1
 
 class Parser:
     def __init__(self)-> None:
