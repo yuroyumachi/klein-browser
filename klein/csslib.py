@@ -99,36 +99,26 @@ class Lexer:
                     case "#":
                         pass
                     case "\'":
-                        pass
-                    case "(":
-                        pass
-                    case ")":
-                        pass
+                        self.state = LexerState.STRING_TOKEN
+                    case "(" | ")" | "[" | "]" | "{" | "}":
+                        return (TokenType.SELF_EXPLAINING, self.source[self.position])
                     case "+":
                         pass
                     case ",":
-                        pass
+                        return (TokenType.COMMA, "")
                     case "-":
                         pass
                     case ".":
                         pass
                     case ":":
-                        pass
+                        return (TokenType.COLON, "")
                     case ";":
-                        pass
+                        return (TokenType.SEMICOLON, "")
                     case "<":
                         pass
                     case "@":
                         pass
-                    case "[":
-                        pass
                     case "\\":
-                        pass
-                    case "]":
-                        pass
-                    case "{":
-                        pass
-                    case "}":
                         pass
             elif self.state == LexerState.STRING_TOKEN:
                 pass
