@@ -120,6 +120,12 @@ class Lexer:
                         pass
                     case "\\":
                         pass
+                    case x if x.isdigit():
+                        self.state = LexerState.NUMBER_TOKEN
+                    case x if x.isalpha() or x == "_":
+                        self.state = LexerState.IDENT_TOKEN
+                    case _:
+                        return (TokenType.DELIM, self.source[self.position])
             elif self.state == LexerState.STRING_TOKEN:
                 pass
 
